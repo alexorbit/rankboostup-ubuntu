@@ -18,7 +18,7 @@ O comando acima instala o Google Chrome (ou Chromium), Xvfb e demais pacotes nec
 ./scripts/rankboostup-headless.sh start
 ```
 
-Por padrão o navegador será iniciado dentro de um display virtual (`xvfb-run`), carregando a extensão e abrindo `https://app.rankboostup.com/dashboard/traffic-exchange/?autostart=1`. Esse endereço ativa automaticamente o botão **Start Exchange Boostup** assim que a página terminar de carregar.
+Por padrão o navegador será iniciado dentro de um display virtual (`xvfb-run`), carregando a extensão e abrindo `https://app.rankboostup.com/dashboard/exchange-session/browser/?autostart=1`. Esse endereço já inicia a sessão de navegação e, com a flag `autostart`, garante que a extensão envie o comando **Start Exchange Boostup** automaticamente.
 
 Para reduzir avisos recorrentes no console headless, o script aplica automaticamente as flags `--disable-machine-learning` (impede o carregamento dos serviços "On Device Model" do Chrome) e `--disable-webgpu` (evita mensagens sobre limites artificiais da API WebGPU). Sempre que precisar de ajustes adicionais utilize `RBU_EXTRA_CHROME_FLAGS` para acrescentar parâmetros personalizados.
 
@@ -59,7 +59,7 @@ O comando baixa a imagem oficial da Google, monta a unidade temporariamente e co
 ./scripts/rankboostup-macos.sh start
 ```
 
-Por padrão o navegador utiliza o modo headless nativo do Chrome (`--headless=new`) e a URL `https://app.rankboostup.com/dashboard/traffic-exchange/?autostart=1`, garantindo que o botão **Start Exchange Boostup** seja pressionado automaticamente após o carregamento.
+Por padrão o navegador utiliza o modo headless nativo do Chrome (`--headless=new`) e a URL `https://app.rankboostup.com/dashboard/exchange-session/browser/?autostart=1`, garantindo que a sessão de navegação seja aberta diretamente e que o comando **Start Exchange Boostup** seja enviado pela extensão assim que a página estiver pronta.
 
 Para encerrar instâncias iniciadas pelo script:
 
