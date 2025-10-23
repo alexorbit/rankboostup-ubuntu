@@ -14,7 +14,7 @@ Usage: $(basename "$0") <command>
 
 Commands:
   install   Instala o Google Chrome em /Applications utilizando o pacote oficial da Google (requer sudo).
-  start     Inicia o RankBoostup em modo headless utilizando o Chrome instalado.
+  start     Inicia o RankBoostup em modo headless utilizando o Chrome instalado (execute sem sudo).
   stop      Interrompe instâncias do Chrome abertas por este script com o perfil configurado.
 
 Variáveis de ambiente:
@@ -134,7 +134,20 @@ start_browser() {
     fi
 
     local profile_dir="${RBU_PROFILE_DIR:-${HOME}/Library/Application Support/rankboostup-headless}"
-    mkdir -p "$profile_dir"
+    if [[ "${profile_dir}" == ~* ]]; then
+        profile_dir="${profile_dir/#~/${HOME}}"
+    fi
+
+    if ! mkdir -p "$profile_dir"; then
+        log "Não foi possível criar o diretório de perfil ${profile_dir}. Verifique as permissões."
+        exit 1
+    fi
+
+    if [[ ! -w "$profile_dir" ]]; then
+        log "O diretório de perfil ${profile_dir} não é gravável pelo usuário atual."
+        log "Se ele foi criado anteriormente com sudo, execute: sudo chown -R '$(id -un):$(id -gn)' '${profile_dir}'"
+        exit 1
+    fi
 
     local start_url="${RBU_START_URL:-https://app.rankboostup.com/dashboard/traffic-exchange/?autostart=1}"
     local debug_port="${RBU_DEBUG_PORT:-9222}"
@@ -188,6 +201,9 @@ start_browser() {
 stop_browser() {
     require_macos
     local profile_dir="${RBU_PROFILE_DIR:-${HOME}/Library/Application Support/rankboostup-headless}"
+    if [[ "${profile_dir}" == ~* ]]; then
+        profile_dir="${profile_dir/#~/${HOME}}"
+    fi
     log "Encerrando processos do Chrome associados ao perfil ${profile_dir}"
     pkill -f "${profile_dir}" || true
 }
@@ -200,6 +216,41 @@ main() {
             ;;
         start)
             shift || true
+            if [[ $EUID -eq 0 ]]; then
+                if [[ -n "${SUDO_USER:-}" ]]; then
+                    log "Detectado sudo. Reexecutando como usuário ${SUDO_USER} para iniciar o Chrome sem privilégios elevados."
+
+                    local target_home=""
+                    if target_home="$(eval echo "~${SUDO_USER}" 2>/dev/null)"; then
+                        if [[ -n "${target_home}" ]]; then
+                            local profile_dir
+                            profile_dir="${RBU_PROFILE_DIR:-${target_home}/Library/Application Support/rankboostup-headless}"
+
+                            if [[ "${profile_dir}" == ~* ]]; then
+                                profile_dir="${profile_dir/#~/${target_home}}"
+                            fi
+
+                            if [[ -d "${profile_dir}" ]]; then
+                                local owner=""
+                                if [[ "$(uname -s)" == "Darwin" ]]; then
+                                    owner="$(stat -f '%Su' "${profile_dir}" 2>/dev/null || true)"
+                                else
+                                    owner="$(stat -c '%U' "${profile_dir}" 2>/dev/null || true)"
+                                fi
+
+                                if [[ -n "${owner}" && "${owner}" != "${SUDO_USER}" ]]; then
+                                    log "Ajustando proprietário do diretório de perfil ${profile_dir} para ${SUDO_USER}."
+                                    chown -R "${SUDO_USER}" "${profile_dir}"
+                                fi
+                            fi
+                        fi
+                    fi
+
+                    exec sudo -u "${SUDO_USER}" -- "$0" start "$@"
+                fi
+                log "O comando start não deve ser executado como root. Execute-o sem sudo."
+                exit 1
+            fi
             start_browser "$@"
             ;;
         stop)
