@@ -14,7 +14,7 @@ Usage: $(basename "$0") <command>
 
 Commands:
   install   Instala o Google Chrome em /Applications utilizando o pacote oficial da Google (requer sudo).
-  start     Inicia o RankBoostup em modo headless utilizando o Chrome instalado.
+  start     Inicia o RankBoostup em modo headless utilizando o Chrome instalado (execute sem sudo).
   stop      Interrompe instâncias do Chrome abertas por este script com o perfil configurado.
 
 Variáveis de ambiente:
@@ -200,6 +200,14 @@ main() {
             ;;
         start)
             shift || true
+            if [[ $EUID -eq 0 ]]; then
+                if [[ -n "${SUDO_USER:-}" ]]; then
+                    log "Detectado sudo. Reexecutando como usuário ${SUDO_USER} para iniciar o Chrome sem privilégios elevados."
+                    exec sudo -u "${SUDO_USER}" -- "$0" start "$@"
+                fi
+                log "O comando start não deve ser executado como root. Execute-o sem sudo."
+                exit 1
+            fi
             start_browser "$@"
             ;;
         stop)
