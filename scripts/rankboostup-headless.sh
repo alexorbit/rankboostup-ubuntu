@@ -112,6 +112,7 @@ auto_login_if_configured() {
         "--hide-scrollbars"
         "--user-data-dir=${profile_dir}"
         "--remote-debugging-port=${port}"
+        "--disable-dev-shm-usage"
         "--no-first-run"
         "--no-default-browser-check"
         "--disable-background-networking"
@@ -128,6 +129,10 @@ auto_login_if_configured() {
         "--allow-insecure-localhost"
         "--window-size=1280,720"
     )
+
+    if [[ ${RBU_NO_SANDBOX:-0} -eq 1 || $EUID -eq 0 ]]; then
+        login_flags+=("--no-sandbox")
+    fi
 
     "${chrome_bin}" "${login_flags[@]}" "${login_url}" >/dev/null 2>&1 &
     local chrome_pid=$!
