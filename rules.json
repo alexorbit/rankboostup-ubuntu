@@ -1,0 +1,20 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {
+          "header": "RankboostupPlugin",
+          "operation": "set",
+          "value": "v2.13"
+        }
+      ]
+    },
+    "condition": {
+      "urlFilter": "*app.rankboostup.com*",
+      "resourceTypes": ["main_frame", "sub_frame", "xmlhttprequest"]
+    }
+  }
+]
