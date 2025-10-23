@@ -25,7 +25,136 @@ Variáveis de ambiente:
   RBU_DEBUG_PORT       Porta de depuração remota (padrão: 9222).
   RBU_HEADLESS_MODE    "chrome" (padrão) para headless nativo ou "none" para abrir janela visível.
   RBU_NO_SANDBOX       Defina como 1 para adicionar --no-sandbox ao iniciar o Chrome.
+  RBU_ENABLE_UNSAFE_SWIFTSHADER
+                       Quando 1 (padrão), força o uso do SwiftShader para garantir WebGL em servidores sem GPU.
+  RBU_EXTRA_CHROME_FLAGS
+                       Flags adicionais repassadas ao Chrome (ex.: "--disable-gpu --disable-webgpu").
+  RBU_LOGIN_EMAIL      Usuário/e-mail utilizado para realizar login automático antes de iniciar o exchange.
+  RBU_LOGIN_PASSWORD   Senha correspondente a RBU_LOGIN_EMAIL para o login automático.
+  RBU_LOGIN_TIMEOUT    Tempo máximo (segundos) aguardando o login automático concluir (padrão: 45).
+  RBU_LOGIN_URL        Substitui a URL de login utilizada pelo processo automático (padrão: https://app.rankboostup.com/login/).
 USAGE
+}
+
+detect_python() {
+    if command -v python3 >/dev/null 2>&1; then
+        printf '%s\n' python3
+        return 0
+    fi
+
+    if command -v python >/dev/null 2>&1; then
+        if python - <<'PY' >/dev/null 2>&1
+import sys
+sys.exit(0 if sys.version_info.major == 3 else 1)
+PY
+        then
+            printf '%s\n' python
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+pick_free_port() {
+    local python_bin
+    if ! python_bin=$(detect_python); then
+        return 1
+    fi
+
+    "${python_bin}" - <<'PY'
+import socket
+
+sock = socket.socket()
+sock.bind(("127.0.0.1", 0))
+port = sock.getsockname()[1]
+sock.close()
+print(port)
+PY
+}
+
+auto_login_if_configured() {
+    local chrome_bin="$1"
+    local profile_dir="$2"
+
+    local email="${RBU_LOGIN_EMAIL:-}"
+    local password="${RBU_LOGIN_PASSWORD:-}"
+
+    if [[ -z "$email" || -z "$password" ]]; then
+        return 0
+    fi
+
+    local python_bin
+    if ! python_bin=$(detect_python); then
+        log "python3 é obrigatório para realizar o login automático, mas não foi encontrado no PATH."
+        return 1
+    fi
+
+    local helper_script="${SCRIPT_DIR}/rbu_auto_login.py"
+    if [[ ! -x "$helper_script" ]]; then
+        log "Script auxiliar ${helper_script} ausente ou sem permissão de execução."
+        return 1
+    fi
+
+    local login_url="${RBU_LOGIN_URL:-https://app.rankboostup.com/login/}"
+    local login_timeout="${RBU_LOGIN_TIMEOUT:-45}"
+
+    local port
+    if ! port=$(pick_free_port); then
+        log "Não foi possível reservar uma porta local para o DevTools."
+        return 1
+    fi
+
+    log "Realizando login automático do RankBoostup."
+
+    local -a login_flags=(
+        "--headless=new"
+        "--disable-gpu"
+        "--hide-scrollbars"
+        "--user-data-dir=${profile_dir}"
+        "--remote-debugging-port=${port}"
+        "--no-first-run"
+        "--no-default-browser-check"
+        "--disable-background-networking"
+        "--disable-sync"
+        "--metrics-recording-only"
+        "--disable-default-apps"
+        "--disable-component-extensions-with-background-pages"
+        "--disable-extensions"
+        "--disable-features=TranslateUI,PushMessaging,CloudMessaging"
+        "--disable-gcm-driver"
+        "--disable-machine-learning"
+        "--disable-webgpu"
+        "--ignore-certificate-errors"
+        "--allow-insecure-localhost"
+        "--window-size=1280,720"
+    )
+
+    "${chrome_bin}" "${login_flags[@]}" "${login_url}" >/dev/null 2>&1 &
+    local chrome_pid=$!
+
+    auto_login_cleanup() {
+        if kill -0 "$chrome_pid" >/dev/null 2>&1; then
+            kill "$chrome_pid" >/dev/null 2>&1 || true
+            wait "$chrome_pid" 2>/dev/null || true
+        fi
+    }
+
+    trap 'auto_login_cleanup' RETURN
+
+    if ! "${python_bin}" "$helper_script" --port "$port" --email "$email" --password "$password" --timeout "$login_timeout"; then
+        log "Falha ao realizar o login automático. Abortando start."
+        return 1
+    fi
+
+    if kill -0 "$chrome_pid" >/dev/null 2>&1; then
+        wait "$chrome_pid" 2>/dev/null || true
+    fi
+
+    trap - RETURN
+    auto_login_cleanup || true
+
+    log "Login automático concluído com sucesso."
 }
 
 require_macos() {
@@ -149,7 +278,11 @@ start_browser() {
         exit 1
     fi
 
-    local start_url="${RBU_START_URL:-https://app.rankboostup.com/dashboard/exchange-session/browser/?autostart=1}"
+    if ! auto_login_if_configured "$chrome_bin" "$profile_dir"; then
+        exit 1
+    fi
+
+    local start_url="${RBU_START_URL:-https://app.rankboostup.com/dashboard/traffic-exchange/?autostart=1}"
     local debug_port="${RBU_DEBUG_PORT:-9222}"
     local headless_mode="${RBU_HEADLESS_MODE:-chrome}"
 
@@ -161,15 +294,34 @@ start_browser() {
         "--no-default-browser-check"
         "--disable-notifications"
         "--disable-popup-blocking"
+        "--disable-background-networking"
         "--disable-dev-shm-usage"
         "--remote-debugging-port=${debug_port}"
         "--autoplay-policy=no-user-gesture-required"
-        "--disable-features=TranslateUI"
+        "--disable-features=TranslateUI,PushMessaging,CloudMessaging"
+        "--disable-gcm-driver"
         "--ignore-certificate-errors"
         "--allow-insecure-localhost"
         "--test-type"
         "--window-size=1920,1080"
+        "--disable-machine-learning"
+        "--disable-webgpu"
     )
+
+    if [[ "${RBU_ENABLE_UNSAFE_SWIFTSHADER:-1}" != "0" ]]; then
+        log "Forçando SwiftShader para compatibilidade WebGL"
+        chrome_flags+=("--use-angle=swiftshader" "--use-gl=angle" "--enable-unsafe-swiftshader")
+    fi
+
+    local extra_flags_raw="${RBU_EXTRA_CHROME_FLAGS:-}"
+    if [[ -n "${extra_flags_raw}" ]]; then
+        log "Anexando flags extras do Chrome a partir de RBU_EXTRA_CHROME_FLAGS"
+        local -a extra_flags=()
+        read -r -a extra_flags <<<"${extra_flags_raw}"
+        if (( ${#extra_flags[@]} > 0 )); then
+            chrome_flags+=("${extra_flags[@]}")
+        fi
+    fi
 
     if [[ ${RBU_NO_SANDBOX:-0} -eq 1 ]]; then
         chrome_flags+=("--no-sandbox")

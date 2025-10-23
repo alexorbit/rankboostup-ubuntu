@@ -28,7 +28,136 @@ Environment variables:
   RBU_NO_SANDBOX       Set to 1 to add --no-sandbox when launching Chrome (default: enabled when running as root).
   RBU_ENABLE_UNSAFE_SWIFTSHADER
                        When 1 (default), forces SwiftShader for WebGL to avoid GPU initialization failures on headless servers.
+  RBU_LOGIN_EMAIL      Optional username/e-mail used to perform an automatic login before starting the exchange.
+  RBU_LOGIN_PASSWORD   Password paired with RBU_LOGIN_EMAIL for the automatic login routine.
+  RBU_LOGIN_TIMEOUT    Seconds to wait for the automatic login flow to finish (default: 45).
+  RBU_LOGIN_URL        Override the login page used during the automatic login (default: https://app.rankboostup.com/login/).
 USAGE
+}
+
+detect_python() {
+    if command -v python3 >/dev/null 2>&1; then
+        printf '%s\n' python3
+        return 0
+    fi
+
+    if command -v python >/dev/null 2>&1; then
+        if python - <<'PY' >/dev/null 2>&1
+import sys
+sys.exit(0 if sys.version_info.major == 3 else 1)
+PY
+        then
+            printf '%s\n' python
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+pick_free_port() {
+    local python_bin
+    if ! python_bin=$(detect_python); then
+        return 1
+    fi
+
+    "${python_bin}" - <<'PY'
+import socket
+
+sock = socket.socket()
+sock.bind(("127.0.0.1", 0))
+port = sock.getsockname()[1]
+sock.close()
+print(port)
+PY
+}
+
+auto_login_if_configured() {
+    local chrome_bin="$1"
+    local profile_dir="$2"
+
+    local email="${RBU_LOGIN_EMAIL:-}"
+    local password="${RBU_LOGIN_PASSWORD:-}"
+
+    if [[ -z "$email" || -z "$password" ]]; then
+        return 0
+    fi
+
+    local python_bin
+    if ! python_bin=$(detect_python); then
+        log "python3 is required to perform the automatic login, but it was not found in PATH."
+        return 1
+    fi
+
+    local helper_script="${SCRIPT_DIR}/rbu_auto_login.py"
+    if [[ ! -x "$helper_script" ]]; then
+        log "Helper script ${helper_script} is missing or not executable."
+        return 1
+    fi
+
+    local login_url="${RBU_LOGIN_URL:-https://app.rankboostup.com/login/}"
+    local login_timeout="${RBU_LOGIN_TIMEOUT:-45}"
+
+    local port
+    if ! port=$(pick_free_port); then
+        log "Unable to reserve a local port for the DevTools protocol."
+        return 1
+    fi
+
+    log "Attempting automatic RankBoostup login using stored credentials."
+
+    local -a login_flags=(
+        "--headless=new"
+        "--disable-gpu"
+        "--hide-scrollbars"
+        "--user-data-dir=${profile_dir}"
+        "--remote-debugging-port=${port}"
+        "--no-first-run"
+        "--no-default-browser-check"
+        "--disable-background-networking"
+        "--disable-sync"
+        "--metrics-recording-only"
+        "--disable-default-apps"
+        "--disable-component-extensions-with-background-pages"
+        "--disable-extensions"
+        "--disable-features=TranslateUI,PushMessaging,CloudMessaging"
+        "--disable-gcm-driver"
+        "--disable-machine-learning"
+        "--disable-webgpu"
+        "--ignore-certificate-errors"
+        "--allow-insecure-localhost"
+        "--window-size=1280,720"
+    )
+
+    if [[ ${RBU_NO_SANDBOX:-0} -eq 1 || $EUID -eq 0 ]]; then
+        login_flags+=("--no-sandbox")
+    fi
+
+    "${chrome_bin}" "${login_flags[@]}" "${login_url}" >/dev/null 2>&1 &
+    local chrome_pid=$!
+
+    auto_login_cleanup() {
+        if kill -0 "$chrome_pid" >/dev/null 2>&1; then
+            kill "$chrome_pid" >/dev/null 2>&1 || true
+            wait "$chrome_pid" 2>/dev/null || true
+        fi
+    }
+
+    trap 'auto_login_cleanup' RETURN
+
+    if ! "${python_bin}" "$helper_script" --port "$port" --email "$email" --password "$password" --timeout "$login_timeout"; then
+        log "Automatic login failed. Aborting start."
+        return 1
+    fi
+
+    if kill -0 "$chrome_pid" >/dev/null 2>&1; then
+        wait "$chrome_pid" 2>/dev/null || true
+    fi
+
+    trap - RETURN
+    auto_login_cleanup || true
+
+    log "Automatic login completed successfully."
 }
 
 autodetect_chrome() {
@@ -231,7 +360,11 @@ start_browser() {
 
     ensure_dbus_ready "$profile_dir"
 
-    local start_url="${RBU_START_URL:-https://app.rankboostup.com/dashboard/exchange-session/browser/?autostart=1}"
+    if ! auto_login_if_configured "$chrome_bin" "$profile_dir"; then
+        exit 1
+    fi
+
+    local start_url="${RBU_START_URL:-https://app.rankboostup.com/dashboard/traffic-exchange/?autostart=1}"
     local debug_port="${RBU_DEBUG_PORT:-9222}"
     local virtual_screen="${RBU_VIRTUAL_SCREEN:-1920x1080x24}"
     local headless_mode="${RBU_HEADLESS_MODE:-xvfb}"
