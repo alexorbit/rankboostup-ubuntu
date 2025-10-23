@@ -117,11 +117,13 @@ start_browser() {
         "--no-first-run"
         "--no-default-browser-check"
         "--disable-notifications"
+        "--disable-push-api"
+        "--disable-gcm-channel"
         "--disable-popup-blocking"
         "--disable-dev-shm-usage"
         "--remote-debugging-port=${debug_port}"
         "--autoplay-policy=no-user-gesture-required"
-        # Disable translation UI and push messaging to avoid deprecated GCM registrations
+        # Disable translation UI and push messaging features to avoid deprecated GCM registrations
         "--disable-features=TranslateUI,PushMessaging"
         "--ignore-certificate-errors"
         "--allow-insecure-localhost"
