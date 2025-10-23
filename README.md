@@ -20,12 +20,15 @@ O comando acima instala o Google Chrome (ou Chromium), Xvfb e demais pacotes nec
 
 Por padrão o navegador será iniciado dentro de um display virtual (`xvfb-run`), carregando a extensão e abrindo `https://app.rankboostup.com/dashboard/traffic-exchange/?autostart=1`. Esse endereço ativa automaticamente o botão **Start Exchange Boostup** assim que a página terminar de carregar.
 
+Para reduzir avisos recorrentes no console headless, o script aplica automaticamente as flags `--disable-machine-learning` (impede o carregamento dos serviços "On Device Model" do Chrome) e `--disable-webgpu` (evita mensagens sobre limites artificiais da API WebGPU). Sempre que precisar de ajustes adicionais utilize `RBU_EXTRA_CHROME_FLAGS` para acrescentar parâmetros personalizados.
+
 Outras variáveis de ambiente úteis:
 
 | Variável              | Descrição                                                                                 |
 |-----------------------|-------------------------------------------------------------------------------------------|
 | `RBU_PROFILE_DIR`     | Caminho do perfil que armazena cookies/sessão. Permite reutilizar logins anteriores.      |
 | `RBU_HEADLESS_MODE`   | `xvfb` (padrão), `chrome` (modo headless nativo) ou `none` (abre janela visível).        |
+| `RBU_EXTRA_CHROME_FLAGS` | Flags adicionais repassadas ao Chrome (ex.: `--disable-gpu --disable-webgpu`). Útil para tratar avisos específicos. |
 | `RBU_EXTENSION_DIR`   | Caminho da extensão caso o repositório tenha sido copiado para outro local.              |
 | `RBU_START_URL`       | URL aberta ao iniciar. Inclua `autostart=1` (ou `true/yes`) para iniciar a sessão sozinho.|
 | `RBU_ENABLE_UNSAFE_SWIFTSHADER` | Mantido em `1` (padrão) força o uso do SwiftShader para permitir WebGL sem GPU física. |

@@ -126,6 +126,8 @@ start_browser() {
         "--allow-insecure-localhost"
         "--test-type"
         "--window-size=1920,1080"
+        "--disable-machine-learning"
+        "--disable-webgpu"
     )
 
     if [[ "$enable_unsafe_swiftshader" != "0" ]]; then
@@ -135,6 +137,16 @@ start_browser() {
 
     if [[ ${RBU_NO_SANDBOX:-0} -eq 1 || $EUID -eq 0 ]]; then
         chrome_flags+=("--no-sandbox")
+    fi
+
+    local extra_flags_raw="${RBU_EXTRA_CHROME_FLAGS:-}"
+    if [[ -n "${extra_flags_raw}" ]]; then
+        log "Appending extra Chrome flags from RBU_EXTRA_CHROME_FLAGS"
+        local -a extra_flags=()
+        read -r -a extra_flags <<<"${extra_flags_raw}"
+        if (( ${#extra_flags[@]} > 0 )); then
+            chrome_flags+=("${extra_flags[@]}")
+        fi
     fi
 
     local -a launcher
