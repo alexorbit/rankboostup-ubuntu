@@ -118,7 +118,8 @@ start_browser() {
         "--disable-dev-shm-usage"
         "--remote-debugging-port=${debug_port}"
         "--autoplay-policy=no-user-gesture-required"
-        "--disable-features=TranslateUI"
+        # Disable translation UI and push messaging to avoid deprecated GCM registrations
+        "--disable-features=TranslateUI,PushMessaging"
         "--ignore-certificate-errors"
         "--allow-insecure-localhost"
         "--test-type"
