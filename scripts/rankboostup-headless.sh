@@ -21,7 +21,7 @@ Environment variables:
   RBU_CHROME_BIN       Override the browser binary to use (default: autodetect google-chrome/chromium).
   RBU_EXTENSION_DIR    Directory containing the unpacked RankBoostup extension (default: ${REPO_ROOT}).
   RBU_PROFILE_DIR      Browser profile directory (default: ~/.config/rankboostup-headless).
-  RBU_START_URL        URL opened when starting the session (default: https://app.rankboostup.com/dashboard/traffic-exchange/?autostart=1).
+  RBU_START_URL        URL opened when starting the session (default: https://app.rankboostup.com/dashboard/exchange-session/browser/?autostart=1).
   RBU_DEBUG_PORT       Remote debugging port (default: 9222).
   RBU_VIRTUAL_SCREEN   Virtual screen size when using Xvfb (default: 1920x1080x24).
   RBU_HEADLESS_MODE    one of [xvfb|chrome|none] (default: xvfb). "chrome" uses Chrome's native headless mode, "none" runs normally.
@@ -377,6 +377,8 @@ start_browser() {
         "--no-first-run"
         "--no-default-browser-check"
         "--disable-notifications"
+        "--disable-push-api"
+        "--disable-gcm-channel"
         "--disable-popup-blocking"
         "--disable-dev-shm-usage"
         "--remote-debugging-port=${debug_port}"
