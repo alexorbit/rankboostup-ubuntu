@@ -8,7 +8,7 @@ var roothost = "app.rankboostup.com";
 // var roothost = "localhost:8000";
 // var rootprotocol = "http://";
 var rootprotocol = "https://";
-const currentVersion = 'v2.13'; // Current version of the plugin
+const currentVersion = 'v2.14'; // Current version of the plugin
 
 function injectScript(file, node) {
     var th = document.getElementsByTagName(node)[0];
