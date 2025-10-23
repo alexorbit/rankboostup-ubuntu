@@ -43,12 +43,56 @@ var exchange_list = "dashboard/traffic-exchange/";
 
 if (location.href.indexOf(exchange_list) >=0) {
     var start_session_button = document.querySelector('.start-exchange-boostup');
-    start_session_button.addEventListener('click', function(e) {
-        // console.log("start session clicked");
-        e.preventDefault();
-        chrome.runtime.sendMessage({doAction: "startSession"});
-        var aTag = document.createElement('a');aTag.setAttribute('href',"https://"+roothost+"/dashboard/exchange-session/browser/");aTag.innerHTML = 'link';document.documentElement.appendChild(aTag);aTag.click();
-    });
+    if (start_session_button) {
+        start_session_button.addEventListener('click', function(e) {
+            // console.log("start session clicked");
+            e.preventDefault();
+            chrome.runtime.sendMessage({doAction: "startSession"});
+            var aTag = document.createElement('a');aTag.setAttribute('href',"https://"+roothost+"/dashboard/exchange-session/browser/");aTag.innerHTML = 'link';document.documentElement.appendChild(aTag);aTag.click();
+        });
+    }
+
+    (function autoStartIfRequested() {
+        try {
+            var params = new URLSearchParams(window.location.search);
+            var autostartRaw = params.get('autostart');
+            var shouldAutostart = false;
+
+            if (autostartRaw) {
+                var normalized = autostartRaw.toLowerCase();
+                shouldAutostart = ['1', 'true', 'yes', 'y'].indexOf(normalized) !== -1;
+            }
+
+            if (!shouldAutostart) {
+                return;
+            }
+
+            var triggerClick = function () {
+                var button = document.querySelector('.start-exchange-boostup');
+                if (!button) {
+                    setTimeout(triggerClick, 500);
+                    return;
+                }
+
+                if (button.dataset.autostartTriggered === 'true') {
+                    return;
+                }
+
+                button.dataset.autostartTriggered = 'true';
+                button.click();
+            };
+
+            if (document.readyState === 'complete' || document.readyState === 'interactive') {
+                setTimeout(triggerClick, 500);
+            } else {
+                document.addEventListener('DOMContentLoaded', function () {
+                    setTimeout(triggerClick, 500);
+                }, { once: true });
+            }
+        } catch (error) {
+            console.warn('Failed to auto-start Rankboostup exchange session', error);
+        }
+    })();
 }
 
 var exchange_url = "dashboard/exchange-session/browser/";
