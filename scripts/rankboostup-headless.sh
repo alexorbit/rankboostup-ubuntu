@@ -26,6 +26,8 @@ Environment variables:
   RBU_VIRTUAL_SCREEN   Virtual screen size when using Xvfb (default: 1920x1080x24).
   RBU_HEADLESS_MODE    one of [xvfb|chrome|none] (default: xvfb). "chrome" uses Chrome's native headless mode, "none" runs normally.
   RBU_NO_SANDBOX       Set to 1 to add --no-sandbox when launching Chrome (default: enabled when running as root).
+  RBU_ENABLE_UNSAFE_SWIFTSHADER
+                       When 1 (default), forces SwiftShader for WebGL to avoid GPU initialization failures on headless servers.
 USAGE
 }
 
@@ -106,6 +108,7 @@ start_browser() {
     local debug_port="${RBU_DEBUG_PORT:-9222}"
     local virtual_screen="${RBU_VIRTUAL_SCREEN:-1920x1080x24}"
     local headless_mode="${RBU_HEADLESS_MODE:-xvfb}"
+    local enable_unsafe_swiftshader="${RBU_ENABLE_UNSAFE_SWIFTSHADER:-1}"
 
     local -a chrome_flags=(
         "--user-data-dir=${profile_dir}"
@@ -124,6 +127,11 @@ start_browser() {
         "--test-type"
         "--window-size=1920,1080"
     )
+
+    if [[ "$enable_unsafe_swiftshader" != "0" ]]; then
+        log "Forcing SwiftShader for WebGL compatibility"
+        chrome_flags+=("--use-angle=swiftshader" "--use-gl=angle" "--enable-unsafe-swiftshader")
+    fi
 
     if [[ ${RBU_NO_SANDBOX:-0} -eq 1 || $EUID -eq 0 ]]; then
         chrome_flags+=("--no-sandbox")
