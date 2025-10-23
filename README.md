@@ -37,4 +37,43 @@ Para encerrar instâncias iniciadas pelo script:
 ```
 
 > **Dica:** Execute o comando `start` uma vez com `RBU_HEADLESS_MODE=none` em um ambiente com interface gráfica (ou tunelado via VNC) para realizar o login. Depois copie o diretório de perfil para os servidores headless.
+
+## Execução headless no macOS
+
+Para executar a mesma automação em máquinas macOS foi adicionado o script `scripts/rankboostup-macos.sh`. Ele instala o Google Chrome e inicia a extensão com os mesmos parâmetros usados no Ubuntu.
+
+### Instalação automática do Google Chrome
+
+```bash
+sudo ./scripts/rankboostup-macos.sh install
+```
+
+O comando baixa a imagem oficial da Google, monta a unidade temporariamente e copia o aplicativo para `/Applications`. Execute-o apenas na primeira configuração da máquina (ou quando desejar atualizar o Chrome).
+
+### Iniciando o tráfego em modo headless
+
+```bash
+./scripts/rankboostup-macos.sh start
+```
+
+Por padrão o navegador utiliza o modo headless nativo do Chrome (`--headless=new`) e a URL `https://app.rankboostup.com/dashboard/traffic-exchange/?autostart=1`, garantindo que o botão **Start Exchange Boostup** seja pressionado automaticamente após o carregamento.
+
+Para encerrar instâncias iniciadas pelo script:
+
+```bash
+./scripts/rankboostup-macos.sh stop
+```
+
+### Variáveis de ambiente úteis (macOS)
+
+| Variável              | Descrição                                                                                 |
+|-----------------------|-------------------------------------------------------------------------------------------|
+| `RBU_PROFILE_DIR`     | Caminho do perfil que armazena cookies/sessão. Padrão: `~/Library/Application Support/rankboostup-headless`. |
+| `RBU_HEADLESS_MODE`   | `chrome` (padrão, headless nativo) ou `none` para abrir o Chrome com janela visível.       |
+| `RBU_EXTENSION_DIR`   | Caminho da extensão caso o repositório tenha sido copiado para outro local.              |
+| `RBU_START_URL`       | URL aberta ao iniciar. Inclua `autostart=1` (ou `true/yes`) para iniciar a sessão sozinho.|
+| `RBU_DEBUG_PORT`      | Porta aberta para depuração remota do Chrome. Permite anexar ferramentas externas se necessário. |
+| `RBU_NO_SANDBOX`      | Defina como `1` para anexar `--no-sandbox` ao Chrome (útil em ambientes restritos).       |
+
+> **Dica:** Assim como no Ubuntu, é possível realizar o login manual executando `RBU_HEADLESS_MODE=none ./scripts/rankboostup-macos.sh start` em uma máquina com interface gráfica. Depois copie o diretório de perfil para reutilizar em servidores headless.
  
