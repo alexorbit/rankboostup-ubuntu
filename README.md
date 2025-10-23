@@ -28,6 +28,7 @@ Outras variáveis de ambiente úteis:
 | `RBU_HEADLESS_MODE`   | `xvfb` (padrão), `chrome` (modo headless nativo) ou `none` (abre janela visível).        |
 | `RBU_EXTENSION_DIR`   | Caminho da extensão caso o repositório tenha sido copiado para outro local.              |
 | `RBU_START_URL`       | URL aberta ao iniciar. Inclua `autostart=1` (ou `true/yes`) para iniciar a sessão sozinho.|
+| `RBU_ENABLE_UNSAFE_SWIFTSHADER` | Mantido em `1` (padrão) força o uso do SwiftShader para permitir WebGL sem GPU física. |
 
 Para encerrar instâncias iniciadas pelo script:
 
