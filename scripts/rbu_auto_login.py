@@ -311,10 +311,7 @@ def evaluate_js(devtools: DevToolsClient, expression: str) -> Any:
     )
     if "exceptionDetails" in result:
         details = result["exceptionDetails"]
-        exception = details.get("exception", {})
-        text = exception.get("description") or exception.get("value") or details.get("text")
-        if not text:
-            text = json.dumps(details, ensure_ascii=False)
+        text = details.get("text") or details.get("exception", {}).get("description")
         raise WebSocketError(f"JavaScript evaluation failed: {text}")
     value = result.get("result", {})
     return value.get("value") if "value" in value else value.get("description")
@@ -362,26 +359,15 @@ def perform_login(devtools: DevToolsClient, email: str, password: str, timeout: 
             "(() => {"
             "  const form = document.querySelector('form.form-signin');"
             "  if (!form) return 'no-form';"
-            "  if (!window.Ladda) {"
-            "    window.Ladda = { create: () => ({ start() {}, stop() {} }) };"
-            "  }"
-            "  const userInput = form.querySelector(\"input[name='username']\") || form.querySelector('#username');"
-            "  const passwordInput = form.querySelector(\"input[name='password']\") || form.querySelector(\"input[type='password']\");"
+            "  const userInput = form.querySelector(""input[name='username']"") || form.querySelector('#username');"
+            "  const passwordInput = form.querySelector(""input[name='password']"") || form.querySelector(""input[type='password']"");"
             "  if (!userInput || !passwordInput) return 'missing-fields';"
             f"  userInput.focus(); userInput.value = {json.dumps(email)};"
             "  userInput.dispatchEvent(new Event('input', { bubbles: true }));"
             f"  passwordInput.focus(); passwordInput.value = {json.dumps(password)};"
             "  passwordInput.dispatchEvent(new Event('input', { bubbles: true }));"
-            "  const submit = form.querySelector(\"button[type='submit']\") || form.querySelector('button');"
-            "  if (typeof form.submit === 'function') {"
-            "    form.submit();"
-            "  } else if (typeof form.requestSubmit === 'function') {"
-            "    if (submit) { form.requestSubmit(submit); } else { form.requestSubmit(); }"
-            "  } else if (submit && typeof submit.click === 'function') {"
-            "    submit.click();"
-            "  } else {"
-            "    return 'no-submit';"
-            "  }"
+            "  const submit = form.querySelector(""button[type='submit']"") || form.querySelector('button');"
+            "  if (submit) { submit.click(); } else { form.submit(); }"
             "  return 'submitted';"
             "})()"
         ),

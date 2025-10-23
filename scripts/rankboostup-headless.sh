@@ -112,6 +112,7 @@ auto_login_if_configured() {
         "--hide-scrollbars"
         "--user-data-dir=${profile_dir}"
         "--remote-debugging-port=${port}"
+        "--disable-dev-shm-usage"
         "--no-first-run"
         "--no-default-browser-check"
         "--disable-background-networking"
