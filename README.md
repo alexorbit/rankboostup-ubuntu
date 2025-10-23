@@ -22,6 +22,8 @@ Por padrão o navegador será iniciado dentro de um display virtual (`xvfb-run`)
 
 Para reduzir avisos recorrentes no console headless, o script aplica automaticamente as flags `--disable-machine-learning` (impede o carregamento dos serviços "On Device Model" do Chrome) e `--disable-webgpu` (evita mensagens sobre limites artificiais da API WebGPU). Sempre que precisar de ajustes adicionais utilize `RBU_EXTRA_CHROME_FLAGS` para acrescentar parâmetros personalizados.
 
+> **Novidade:** a partir desta versão o script inicializa automaticamente um barramento D-Bus minimalista quando necessário e exporta os endereços para o Chrome. Isso elimina a enxurrada de mensagens `Failed to connect to the bus` em ambientes sem sistema de mensagens dedicado. As dependências de `dbus` são instaladas pelo comando `install` e encerradas junto com o `stop`.
+
 Outras variáveis de ambiente úteis:
 
 | Variável              | Descrição                                                                                 |
