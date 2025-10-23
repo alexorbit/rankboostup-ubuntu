@@ -28,7 +28,132 @@ Environment variables:
   RBU_NO_SANDBOX       Set to 1 to add --no-sandbox when launching Chrome (default: enabled when running as root).
   RBU_ENABLE_UNSAFE_SWIFTSHADER
                        When 1 (default), forces SwiftShader for WebGL to avoid GPU initialization failures on headless servers.
+  RBU_LOGIN_EMAIL      Optional username/e-mail used to perform an automatic login before starting the exchange.
+  RBU_LOGIN_PASSWORD   Password paired with RBU_LOGIN_EMAIL for the automatic login routine.
+  RBU_LOGIN_TIMEOUT    Seconds to wait for the automatic login flow to finish (default: 45).
+  RBU_LOGIN_URL        Override the login page used during the automatic login (default: https://app.rankboostup.com/login/).
 USAGE
+}
+
+detect_python() {
+    if command -v python3 >/dev/null 2>&1; then
+        printf '%s\n' python3
+        return 0
+    fi
+
+    if command -v python >/dev/null 2>&1; then
+        if python - <<'PY' >/dev/null 2>&1
+import sys
+sys.exit(0 if sys.version_info.major == 3 else 1)
+PY
+        then
+            printf '%s\n' python
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+pick_free_port() {
+    local python_bin
+    if ! python_bin=$(detect_python); then
+        return 1
+    fi
+
+    "${python_bin}" - <<'PY'
+import socket
+
+sock = socket.socket()
+sock.bind(("127.0.0.1", 0))
+port = sock.getsockname()[1]
+sock.close()
+print(port)
+PY
+}
+
+auto_login_if_configured() {
+    local chrome_bin="$1"
+    local profile_dir="$2"
+
+    local email="${RBU_LOGIN_EMAIL:-}"
+    local password="${RBU_LOGIN_PASSWORD:-}"
+
+    if [[ -z "$email" || -z "$password" ]]; then
+        return 0
+    fi
+
+    local python_bin
+    if ! python_bin=$(detect_python); then
+        log "python3 is required to perform the automatic login, but it was not found in PATH."
+        return 1
+    fi
+
+    local helper_script="${SCRIPT_DIR}/rbu_auto_login.py"
+    if [[ ! -x "$helper_script" ]]; then
+        log "Helper script ${helper_script} is missing or not executable."
+        return 1
+    fi
+
+    local login_url="${RBU_LOGIN_URL:-https://app.rankboostup.com/login/}"
+    local login_timeout="${RBU_LOGIN_TIMEOUT:-45}"
+
+    local port
+    if ! port=$(pick_free_port); then
+        log "Unable to reserve a local port for the DevTools protocol."
+        return 1
+    fi
+
+    log "Attempting automatic RankBoostup login using stored credentials."
+
+    local -a login_flags=(
+        "--headless=new"
+        "--disable-gpu"
+        "--hide-scrollbars"
+        "--user-data-dir=${profile_dir}"
+        "--remote-debugging-port=${port}"
+        "--no-first-run"
+        "--no-default-browser-check"
+        "--disable-background-networking"
+        "--disable-sync"
+        "--metrics-recording-only"
+        "--disable-default-apps"
+        "--disable-component-extensions-with-background-pages"
+        "--disable-extensions"
+        "--disable-features=TranslateUI,PushMessaging,CloudMessaging"
+        "--disable-gcm-driver"
+        "--disable-machine-learning"
+        "--disable-webgpu"
+        "--ignore-certificate-errors"
+        "--allow-insecure-localhost"
+        "--window-size=1280,720"
+    )
+
+    "${chrome_bin}" "${login_flags[@]}" "${login_url}" >/dev/null 2>&1 &
+    local chrome_pid=$!
+
+    auto_login_cleanup() {
+        if kill -0 "$chrome_pid" >/dev/null 2>&1; then
+            kill "$chrome_pid" >/dev/null 2>&1 || true
+            wait "$chrome_pid" 2>/dev/null || true
+        fi
+    }
+
+    trap 'auto_login_cleanup' RETURN
+
+    if ! "${python_bin}" "$helper_script" --port "$port" --email "$email" --password "$password" --timeout "$login_timeout"; then
+        log "Automatic login failed. Aborting start."
+        return 1
+    fi
+
+    if kill -0 "$chrome_pid" >/dev/null 2>&1; then
+        wait "$chrome_pid" 2>/dev/null || true
+    fi
+
+    trap - RETURN
+    auto_login_cleanup || true
+
+    log "Automatic login completed successfully."
 }
 
 autodetect_chrome() {
@@ -58,14 +183,139 @@ require_root() {
     fi
 }
 
+state_dir_for_profile() {
+    local profile_dir="$1"
+    printf '%s\n' "${profile_dir%/}/.rankboostup-headless-state"
+}
+
+set_dbus_environment() {
+    local address="$1"
+    export DBUS_SYSTEM_BUS_ADDRESS="$address"
+    export DBUS_SESSION_BUS_ADDRESS="$address"
+}
+
+ensure_dbus_ready() {
+    local profile_dir="$1"
+    local state_dir
+    state_dir=$(state_dir_for_profile "$profile_dir")
+    mkdir -p "$state_dir"
+
+    local pid_file="${state_dir}/dbus.pid"
+    local socket_file="${state_dir}/system_bus_socket"
+    local mode_file="${state_dir}/dbus.mode"
+
+    if [[ -f "$pid_file" ]]; then
+        local existing_pid
+        existing_pid=$(cat "$pid_file" 2>/dev/null || true)
+        if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" 2>/dev/null; then
+            local mode
+            mode=$(cat "$mode_file" 2>/dev/null || true)
+            if [[ "$mode" == "private" ]]; then
+                set_dbus_environment "unix:path=${socket_file}"
+            else
+                set_dbus_environment "unix:path=/run/dbus/system_bus_socket"
+            fi
+            return 0
+        fi
+        rm -f "$pid_file" "$mode_file"
+    fi
+
+    rm -f "$socket_file"
+
+    local system_socket="/run/dbus/system_bus_socket"
+    if [[ -S "$system_socket" ]]; then
+        printf '%s\n' "system" >"$mode_file"
+        set_dbus_environment "unix:path=${system_socket}"
+        return 0
+    fi
+
+    if ! command -v dbus-daemon >/dev/null 2>&1; then
+        log "dbus-daemon not available; skipping D-Bus bootstrap"
+        return 0
+    fi
+
+    if [[ $EUID -eq 0 ]]; then
+        mkdir -p /run/dbus
+        local sys_pid_file="/run/dbus/pid"
+        if [[ -f "$sys_pid_file" ]]; then
+            local sys_pid
+            sys_pid=$(cat "$sys_pid_file" 2>/dev/null || true)
+            if [[ -n "$sys_pid" ]] && ! kill -0 "$sys_pid" 2>/dev/null; then
+                rm -f "$sys_pid_file" "$system_socket"
+            fi
+        fi
+
+        log "Starting dedicated system D-Bus daemon for headless Chrome"
+        local sys_pid
+        if sys_pid=$(dbus-daemon --system --fork --print-pid 1 2>/dev/null); then
+            printf '%s\n' "$sys_pid" >"$pid_file"
+            printf '%s\n' "system-managed" >"$mode_file"
+            set_dbus_environment "unix:path=${system_socket}"
+            return 0
+        else
+            log "Warning: Failed to start system D-Bus daemon. Falling back to private session bus."
+        fi
+    fi
+
+    local address="unix:path=${socket_file}"
+    log "Launching private D-Bus system bus for headless Chrome (session)"
+    local pid
+    if pid=$(dbus-daemon --session --fork --print-pid 1 --address="${address}" 2>/dev/null); then
+        printf '%s\n' "$pid" >"$pid_file"
+        printf '%s\n' "private" >"$mode_file"
+        set_dbus_environment "${address}"
+    else
+        log "Warning: Failed to start private D-Bus daemon. Chrome may continue with verbose D-Bus errors."
+        rm -f "$pid_file" "$mode_file"
+    fi
+}
+
+cleanup_managed_dbus() {
+    local profile_dir="$1"
+    local state_dir
+    state_dir=$(state_dir_for_profile "$profile_dir")
+
+    local pid_file="${state_dir}/dbus.pid"
+    local mode_file="${state_dir}/dbus.mode"
+    local socket_file="${state_dir}/system_bus_socket"
+
+    if [[ -f "$mode_file" ]] && [[ -f "$pid_file" ]]; then
+        local mode
+        mode=$(cat "$mode_file" 2>/dev/null || true)
+        local dbus_pid
+        dbus_pid=$(cat "$pid_file" 2>/dev/null || true)
+        case "$mode" in
+            private)
+                if [[ -n "$dbus_pid" ]] && kill -0 "$dbus_pid" 2>/dev/null; then
+                    log "Stopping private D-Bus daemon (PID $dbus_pid)"
+                    kill "$dbus_pid" || true
+                fi
+                rm -f "$socket_file"
+                ;;
+            system-managed)
+                if [[ -n "$dbus_pid" ]] && kill -0 "$dbus_pid" 2>/dev/null; then
+                    log "Stopping dedicated system D-Bus daemon (PID $dbus_pid)"
+                    kill "$dbus_pid" || true
+                fi
+                if [[ -f /run/dbus/pid ]] && [[ $(cat /run/dbus/pid 2>/dev/null || true) == "$dbus_pid" ]]; then
+                    rm -f /run/dbus/pid
+                fi
+                rm -f /run/dbus/system_bus_socket
+                ;;
+        esac
+    fi
+
+    rm -f "$pid_file" "$mode_file"
+}
+
 install_dependencies() {
     require_root
 
     log "Updating apt metadata"
     apt-get update -y
 
-    log "Installing base packages (wget, gnupg, unzip, Xvfb, fonts)"
-    apt-get install -y wget curl gnupg ca-certificates unzip xvfb fonts-liberation libu2f-udev xdg-utils >/dev/null
+    log "Installing base packages (wget, gnupg, unzip, Xvfb, fonts, D-Bus)"
+    apt-get install -y wget curl gnupg ca-certificates unzip xvfb fonts-liberation libu2f-udev xdg-utils dbus >/dev/null
 
     if ! command -v google-chrome >/dev/null 2>&1 && ! command -v google-chrome-stable >/dev/null 2>&1; then
         log "Configuring Google Chrome APT repository"
@@ -104,6 +354,12 @@ start_browser() {
     local profile_dir="${RBU_PROFILE_DIR:-$HOME/.config/rankboostup-headless}"
     mkdir -p "$profile_dir"
 
+    ensure_dbus_ready "$profile_dir"
+
+    if ! auto_login_if_configured "$chrome_bin" "$profile_dir"; then
+        exit 1
+    fi
+
     local start_url="${RBU_START_URL:-https://app.rankboostup.com/dashboard/traffic-exchange/?autostart=1}"
     local debug_port="${RBU_DEBUG_PORT:-9222}"
     local virtual_screen="${RBU_VIRTUAL_SCREEN:-1920x1080x24}"
@@ -121,8 +377,10 @@ start_browser() {
         "--disable-dev-shm-usage"
         "--remote-debugging-port=${debug_port}"
         "--autoplay-policy=no-user-gesture-required"
+        "--disable-background-networking"
         # Disable translation UI and push messaging to avoid deprecated GCM registrations
-        "--disable-features=TranslateUI,PushMessaging"
+        "--disable-features=TranslateUI,PushMessaging,CloudMessaging"
+        "--disable-gcm-driver"
         "--ignore-certificate-errors"
         "--allow-insecure-localhost"
         "--test-type"
@@ -177,6 +435,7 @@ stop_browser() {
     local profile_dir="${RBU_PROFILE_DIR:-$HOME/.config/rankboostup-headless}"
     log "Stopping Chrome processes that use profile ${profile_dir}"
     pkill -f -- "${profile_dir}" || true
+    cleanup_managed_dbus "$profile_dir"
 }
 
 main() {
