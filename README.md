@@ -22,6 +22,8 @@ Por padrão o navegador será iniciado dentro de um display virtual (`xvfb-run`)
 
 Para reduzir avisos recorrentes no console headless, o script aplica automaticamente as flags `--disable-machine-learning` (impede o carregamento dos serviços "On Device Model" do Chrome) e `--disable-webgpu` (evita mensagens sobre limites artificiais da API WebGPU). Sempre que precisar de ajustes adicionais utilize `RBU_EXTRA_CHROME_FLAGS` para acrescentar parâmetros personalizados.
 
+> **Novidade:** a partir desta versão o script inicializa automaticamente um barramento D-Bus minimalista quando necessário e exporta os endereços para o Chrome. Isso elimina a enxurrada de mensagens `Failed to connect to the bus` em ambientes sem sistema de mensagens dedicado. As dependências de `dbus` são instaladas pelo comando `install` e encerradas junto com o `stop`.
+
 Outras variáveis de ambiente úteis:
 
 | Variável              | Descrição                                                                                 |
@@ -32,6 +34,11 @@ Outras variáveis de ambiente úteis:
 | `RBU_EXTENSION_DIR`   | Caminho da extensão caso o repositório tenha sido copiado para outro local.              |
 | `RBU_START_URL`       | URL aberta ao iniciar. Inclua `autostart=1` (ou `true/yes`) para iniciar a sessão sozinho.|
 | `RBU_ENABLE_UNSAFE_SWIFTSHADER` | Mantido em `1` (padrão) força o uso do SwiftShader para permitir WebGL sem GPU física. |
+| `RBU_LOGIN_EMAIL`     | Usuário/e-mail utilizado para realizar login automático antes do start.                 |
+| `RBU_LOGIN_PASSWORD`  | Senha correspondente ao usuário informado no `RBU_LOGIN_EMAIL`.                         |
+| `RBU_LOGIN_TIMEOUT`   | Tempo máximo (segundos) aguardando o login automático concluir (padrão: `45`).           |
+
+> **Novidade:** Defina `RBU_LOGIN_EMAIL` e `RBU_LOGIN_PASSWORD` para que o script abra um Chrome headless temporário, preencha o formulário de login via DevTools e armazene a sessão no perfil antes de iniciar o tráfego. O login automático é ignorado se as credenciais já estiverem válidas no diretório do perfil. Ajuste a URL utilizada através de `RBU_LOGIN_URL` caso necessário.
 
 Para encerrar instâncias iniciadas pelo script:
 
@@ -77,6 +84,13 @@ Para encerrar instâncias iniciadas pelo script:
 | `RBU_START_URL`       | URL aberta ao iniciar. Inclua `autostart=1` (ou `true/yes`) para iniciar a sessão sozinho.|
 | `RBU_DEBUG_PORT`      | Porta aberta para depuração remota do Chrome. Permite anexar ferramentas externas se necessário. |
 | `RBU_NO_SANDBOX`      | Defina como `1` para anexar `--no-sandbox` ao Chrome (útil em ambientes restritos).       |
+| `RBU_ENABLE_UNSAFE_SWIFTSHADER` | Mantido em `1` (padrão) força o uso do SwiftShader para permitir WebGL sem GPU física. |
+| `RBU_EXTRA_CHROME_FLAGS` | Flags adicionais repassadas ao Chrome (ex.: `--disable-gpu --disable-webgpu`).          |
+| `RBU_LOGIN_EMAIL`     | Usuário/e-mail para o login automático antes da sessão headless.                         |
+| `RBU_LOGIN_PASSWORD`  | Senha usada em conjunto com `RBU_LOGIN_EMAIL`.                                           |
+| `RBU_LOGIN_TIMEOUT`   | Tempo máximo (segundos) aguardando o login automático concluir (padrão: `45`).           |
+
+> **Novidade:** Assim como no Ubuntu, o script macOS consegue efetuar o login automaticamente via DevTools quando `RBU_LOGIN_EMAIL` e `RBU_LOGIN_PASSWORD` são informados. O processo reutiliza o mesmo diretório de perfil, evitando prompts em servidores remotos. Se precisar usar outra rota de autenticação, basta definir `RBU_LOGIN_URL`.
 
 > **Dica:** Assim como no Ubuntu, é possível realizar o login manual executando `RBU_HEADLESS_MODE=none ./scripts/rankboostup-macos.sh start` em uma máquina com interface gráfica. Depois copie o diretório de perfil para reutilizar em servidores headless.
  
