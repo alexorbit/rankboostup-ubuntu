@@ -21,7 +21,7 @@ Variáveis de ambiente:
   RBU_CHROME_BIN       Caminho do binário do Chrome (padrão: autodetectar /Applications/Google Chrome.app).
   RBU_EXTENSION_DIR    Diretório da extensão (padrão: ${REPO_ROOT}).
   RBU_PROFILE_DIR      Diretório do perfil do navegador (padrão: ~/Library/Application Support/rankboostup-headless).
-  RBU_START_URL        URL aberta ao iniciar (padrão: https://app.rankboostup.com/dashboard/traffic-exchange/?autostart=1).
+  RBU_START_URL        URL aberta ao iniciar (padrão: https://app.rankboostup.com/dashboard/exchange-session/browser/?autostart=1).
   RBU_DEBUG_PORT       Porta de depuração remota (padrão: 9222).
   RBU_HEADLESS_MODE    "chrome" (padrão) para headless nativo ou "none" para abrir janela visível.
   RBU_NO_SANDBOX       Defina como 1 para adicionar --no-sandbox ao iniciar o Chrome.
@@ -149,7 +149,7 @@ start_browser() {
         exit 1
     fi
 
-    local start_url="${RBU_START_URL:-https://app.rankboostup.com/dashboard/traffic-exchange/?autostart=1}"
+    local start_url="${RBU_START_URL:-https://app.rankboostup.com/dashboard/exchange-session/browser/?autostart=1}"
     local debug_port="${RBU_DEBUG_PORT:-9222}"
     local headless_mode="${RBU_HEADLESS_MODE:-chrome}"
 

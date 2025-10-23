@@ -39,6 +39,22 @@ if (location.host!=roothost) {
     });
 }
 
+function shouldAutoStartFromQuery() {
+    try {
+        var params = new URLSearchParams(window.location.search);
+        var autostartRaw = params.get('autostart');
+        if (!autostartRaw) {
+            return false;
+        }
+
+        var normalized = autostartRaw.toLowerCase();
+        return ['1', 'true', 'yes', 'y'].indexOf(normalized) !== -1;
+    } catch (error) {
+        console.warn('Rankboostup: failed to read autostart query parameter', error);
+        return false;
+    }
+}
+
 var exchange_list = "dashboard/traffic-exchange/";
 
 if (location.href.indexOf(exchange_list) >=0) {
@@ -53,44 +69,31 @@ if (location.href.indexOf(exchange_list) >=0) {
     }
 
     (function autoStartIfRequested() {
-        try {
-            var params = new URLSearchParams(window.location.search);
-            var autostartRaw = params.get('autostart');
-            var shouldAutostart = false;
+        if (!shouldAutoStartFromQuery()) {
+            return;
+        }
 
-            if (autostartRaw) {
-                var normalized = autostartRaw.toLowerCase();
-                shouldAutostart = ['1', 'true', 'yes', 'y'].indexOf(normalized) !== -1;
-            }
-
-            if (!shouldAutostart) {
+        var triggerClick = function () {
+            var button = document.querySelector('.start-exchange-boostup');
+            if (!button) {
+                setTimeout(triggerClick, 500);
                 return;
             }
 
-            var triggerClick = function () {
-                var button = document.querySelector('.start-exchange-boostup');
-                if (!button) {
-                    setTimeout(triggerClick, 500);
-                    return;
-                }
-
-                if (button.dataset.autostartTriggered === 'true') {
-                    return;
-                }
-
-                button.dataset.autostartTriggered = 'true';
-                button.click();
-            };
-
-            if (document.readyState === 'complete' || document.readyState === 'interactive') {
-                setTimeout(triggerClick, 500);
-            } else {
-                document.addEventListener('DOMContentLoaded', function () {
-                    setTimeout(triggerClick, 500);
-                }, { once: true });
+            if (button.dataset.autostartTriggered === 'true') {
+                return;
             }
-        } catch (error) {
-            console.warn('Failed to auto-start Rankboostup exchange session', error);
+
+            button.dataset.autostartTriggered = 'true';
+            button.click();
+        };
+
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+            setTimeout(triggerClick, 500);
+        } else {
+            document.addEventListener('DOMContentLoaded', function () {
+                setTimeout(triggerClick, 500);
+            }, { once: true });
         }
     })();
 }
@@ -98,6 +101,13 @@ if (location.href.indexOf(exchange_list) >=0) {
 var exchange_url = "dashboard/exchange-session/browser/";
 
 if (location.href.indexOf(exchange_url) >=0) {
+    if (shouldAutoStartFromQuery()) {
+        if (!window.__rankboostupAutoStartSessionSent) {
+            window.__rankboostupAutoStartSessionSent = true;
+            chrome.runtime.sendMessage({doAction: "startSession"});
+        }
+    }
+
     injectScript( chrome.runtime.getURL('/scripts/autosurf.js'), 'body');
 
     window.addEventListener("startPayload", function(event) {
